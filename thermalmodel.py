@@ -28,14 +28,16 @@ class ThermalModel:
     def extract_temperature_data_from_fits(directory, ext_filter="fits"):
         """
         Loads all FITS headers from a directory and extracts sensor temperature, exposure, etc.
+        Chooses timestamp key dynamically from available header keywords.
 
         Returns
         -------
         df : pd.DataFrame
-            Contains timestamp, sensor_temp, external_temp, exposure_time, gain, frame_number
+            Contains all metadata including the actual timestamp key used.
         """
         directory = Path(directory).resolve()
         all_data = []
+        timestamp_key_used = None
 
         for root, _, files in os.walk(directory):
             for fname in files:
@@ -48,6 +50,7 @@ class ThermalModel:
                         for key in ["IMESTAMP", "TIMESTAMP", "DATE-OBS", "TIME"]:
                             if key in hdr:
                                 ts = hdr[key]
+                                timestamp_key_used = key  # <--- guardamos la key real
                                 break
 
                         t_sensor = hdr.get('TEMP')
@@ -61,7 +64,7 @@ class ThermalModel:
 
                         all_data.append({
                             "path": str(fpath),
-                            "timestamp": float(ts),
+                            key: float(ts),  # usamos la clave real aquí
                             "sensor_temp": float(t_sensor),
                             "external_temp": float(t_external) if t_external is not None else np.nan,
                             "exposure_time": float(exp),
@@ -71,6 +74,16 @@ class ThermalModel:
 
                     except Exception as e:
                         print(f"[ERROR] {fpath.name}: {e}")
+
+    df = pd.DataFrame(all_data)
+
+    # Ordenar usando la clave de timestamp detectada
+    if timestamp_key_used and timestamp_key_used in df.columns:
+        df.sort_values(by=timestamp_key_used, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+
+    return df
+
 
         df = pd.DataFrame(all_data)
         df.sort_values(by="timestamp", inplace=True)
